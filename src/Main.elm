@@ -4,6 +4,7 @@ import Browser
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
+import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
@@ -22,6 +23,7 @@ type alias Model =
     , gamesList : List Game
     , selectedGame : Maybe Game
     , selectedPlayer : Maybe Player
+    , gameSwitchToggle : ToggleState Game
     , timeZone : Time.Zone
     , currentTime : Time.Posix
     }
@@ -32,10 +34,16 @@ initialModel =
     { displayMode = Day
     , gamesList = initialGamesList
     , selectedGame = Nothing
+    , gameSwitchToggle = Inactive
     , selectedPlayer = List.head playerList
     , timeZone = Time.utc
     , currentTime = Time.millisToPosix 0
     }
+
+
+type ToggleState target
+    = Active target
+    | Inactive
 
 
 init : ( Model, Cmd Msg )
@@ -249,6 +257,8 @@ type Msg
     = NoOp
     | ClickedThemeButton
     | SelectGame Game
+    | ToggleGameSwitch Game
+    | DisableSwitchGameDialog
     | SelectPlayer Player
     | Tick Time.Posix
     | AdjustTimeZone Time.Zone
@@ -268,6 +278,20 @@ update msg model =
             else
                 ( { model | displayMode = Day }, Cmd.none )
 
+        ToggleGameSwitch game ->
+            let
+                newState =
+                    if model.gameSwitchToggle == Active game then
+                        Inactive
+
+                    else
+                        Active game
+            in
+            ( { model | gameSwitchToggle = newState }, Cmd.none )
+
+        DisableSwitchGameDialog ->
+            ( { model | gameSwitchToggle = Inactive }, Cmd.none )
+
         SelectGame game ->
             if model.selectedGame == Just game then
                 ( { model | selectedGame = Nothing }, Cmd.none )
@@ -280,7 +304,7 @@ update msg model =
                     gamesList =
                         refreshGames game selectedGame model.gamesList
                 in
-                ( { model | selectedGame = Just selectedGame, gamesList = gamesList }, Cmd.none )
+                update DisableSwitchGameDialog { model | selectedGame = Just selectedGame, gamesList = gamesList }
 
         SelectPlayer player ->
             if model.selectedPlayer == Just player then
@@ -422,6 +446,18 @@ gameItem model theme game =
                 Nothing ->
                     False
 
+        buttonMsg =
+            case model.selectedGame of
+                Nothing ->
+                    SelectGame game
+
+                Just selectedGame ->
+                    if gameIsSelected then
+                        NoOp
+
+                    else
+                        ToggleGameSwitch game
+
         playerIcon =
             case model.selectedPlayer of
                 Just player ->
@@ -499,7 +535,7 @@ gameItem model theme game =
                     { src = gameIcon, description = gameTitle }
             , inFront selectionIcon
             ]
-            { onPress = Just <| SelectGame game
+            { onPress = Just buttonMsg
             , label = text gameTitle
             }
         ]
@@ -572,11 +608,101 @@ switchBottomRow =
 
 switchHomeScreen : Model -> ThemeColors -> DisplayTheme Msg -> Element Msg
 switchHomeScreen model colors theme =
+    let
+        changeGameDialog =
+            let
+                dialogColors =
+                    colors.buttonColors
+
+                dialogFont =
+                    colors.mainColors
+
+                buttonColors =
+                    colors.buttonColors
+            in
+            case ( model.selectedGame, model.selectedPlayer, model.gameSwitchToggle ) of
+                ( Just game, Just player, Active newGame ) ->
+                    column
+                        [ width <| fill
+                        , height <| fill
+                        , Background.color <| rgba255 0 0 0 0.5
+                        , inFront <|
+                            {- Inner area for the actual dialog -}
+                            column
+                                [ centerX
+                                , centerY
+                                , Background.color dialogColors.backgroundColor
+                                ]
+                                [ row
+                                    [ padding 30
+                                    , spacing 10
+                                    ]
+                                    [ column
+                                        [ inFront <|
+                                            image
+                                                [ width <| px 42
+                                                , height <| px 42
+                                                , Border.width 3
+                                                , Border.rounded 45
+                                                , clip
+                                                , alignBottom
+                                                , centerX
+                                                ]
+                                                { description = P.name player
+                                                , src = P.icon player
+                                                }
+                                        ]
+                                        [ image
+                                            [ width <| px 128
+                                            , height <| px 128
+                                            ]
+                                            { description = G.title game
+                                            , src = G.icon game
+                                            }
+                                        ]
+                                    , column
+                                        []
+                                        [ text "Close the game you are currently playing?"
+                                        , text "Any unsaved data will be lost."
+                                        ]
+                                    ]
+                                , row
+                                    [ width <| fill
+                                    ]
+                                    [ Input.button
+                                        ([ centerX
+                                         , centerY
+                                         , width <| fill
+                                         , padding 10
+                                         , inFront <| el [ centerX, centerY ] <| text "Cancel"
+                                         ]
+                                            ++ theme.buttonColors
+                                        )
+                                        { label = text "", onPress = Just DisableSwitchGameDialog }
+                                    , Input.button
+                                        ([ centerX
+                                         , centerY
+                                         , width <| fill
+                                         , padding 10
+                                         , inFront <| el [ centerX, centerY ] <| text "Choose"
+                                         ]
+                                            ++ theme.buttonColors
+                                        )
+                                        { label = text "", onPress = Just (SelectGame newGame) }
+                                    ]
+                                ]
+                        ]
+                        []
+
+                ( _, _, _ ) ->
+                    none
+    in
     Element.column
         [ height fill
         , width fill
         , padding 15
         , htmlAttribute (HtmlAttributes.style "user-select" "none")
+        , inFront changeGameDialog
         ]
         [ switchTopRow model colors theme
         , switchGameRow model theme
@@ -645,6 +771,7 @@ viewIcon icon size color =
 viewWifiIcon : Color -> Element Msg
 viewWifiIcon color =
     viewIcon Ionicon.wifi 28 color
+
 
 viewBatteryIcon : Color -> Element Msg
 viewBatteryIcon color =

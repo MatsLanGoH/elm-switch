@@ -4,7 +4,6 @@ import Browser
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
@@ -711,6 +710,7 @@ switchHomeScreen model colors theme =
         ]
 
 
+mainView : Model -> Html Msg
 mainView model =
     let
         colors =
